@@ -1,18 +1,19 @@
-from sklearn.svm import LinearSVC
-from sklearn.exceptions import NotFittedError
-import numpy as np
 import cv2 as cv
+import numpy as np
+from sklearn.svm import LinearSVC
+
 
 class Model:
+
     def __init__(self):
-        self.model = LinearSVC(max_iter=2000)
+        self.model = LinearSVC(max_iter=5000, dual='auto')
         self.is_trained = False
 
     def train_model(self, counters):
         img_list = []
         class_list = []
 
-        # 1-Sinf ma'lumotlarini yuklash
+        # Load Class 1 images
         for i in range(1, counters[0]):
             img = cv.imread(f'1/frame{i}.jpg', cv.IMREAD_GRAYSCALE)
             if img is None:
@@ -21,7 +22,7 @@ class Model:
             img_list.append(img)
             class_list.append(1)
 
-        # 2-Sinf ma'lumotlarini yuklash
+        # Load Class 2 images
         for i in range(1, counters[1]):
             img = cv.imread(f'2/frame{i}.jpg', cv.IMREAD_GRAYSCALE)
             if img is None:
@@ -31,16 +32,16 @@ class Model:
             class_list.append(2)
 
         if len(img_list) == 0:
-            print("O'qitish uchun rasmlar yetarli emas!")
+            print("Not enough images for training!")
             return
 
         img_list = np.array(img_list)
         class_list = np.array(class_list)
 
-        print("O'qitish shakli:", img_list.shape)
+        print("Training shape:", img_list.shape)
         self.model.fit(img_list, class_list)
         self.is_trained = True
-        print("Model muvaffaqiyatli o'qitildi!")
+        print("Model trained successfully!")
 
     def predict(self, frame):
         if not self.is_trained:

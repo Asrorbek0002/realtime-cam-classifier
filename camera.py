@@ -1,14 +1,16 @@
 import cv2 as cv
 
+
 class Camera:
+
     def __init__(self):
         self.camera = cv.VideoCapture(0)
         if not self.camera.isOpened():
-            raise ValueError("Kamerani ochib bo'lmadi!")
-        
+            raise ValueError("Unable to open the camera!")
+
         self.width = int(self.camera.get(cv.CAP_PROP_FRAME_WIDTH))
         self.height = int(self.camera.get(cv.CAP_PROP_FRAME_HEIGHT))
-        
+
     def __del__(self):
         if self.camera.isOpened():
             self.camera.release()
