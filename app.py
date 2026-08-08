@@ -30,7 +30,13 @@ class App:
         self.update()
 
         self.window.attributes('-topmost', True)
+        self.window.protocol("WM_DELETE_WINDOW", self.on_close)
         self.window.mainloop()
+
+    def on_close(self):
+        # Release the webcam instead of leaving it locked after the window goes
+        self.camera.release()
+        self.window.destroy()
 
     def init_gui(self):
         self.canvas = tk.Canvas(
@@ -98,6 +104,8 @@ class App:
         self.class_label.config(font=("Arial", 20))
         self.class_label.pack(anchor=tk.CENTER, expand=True)
 
+        self.update_sample_count()
+
     def auto_predict_toggle(self):
         if not self.model.is_trained:
             messagebox.showwarning("Warning", "Please train the model first!")
@@ -109,27 +117,36 @@ class App:
         if not ret or frame is None:
             return
 
-        if not os.path.exists('1'):
-            os.mkdir('1')
-        if not os.path.exists('2'):
-            os.mkdir('2')
+        directory = model.class_dir(class_num)
+        os.makedirs(directory, exist_ok=True)
 
-        file_path = f'{class_num}/frame{self.counters[class_num - 1]}.jpg'
-        cv.imwrite(file_path, cv.cvtColor(frame, cv.COLOR_RGB2GRAY))
+        # Store exactly what the classifier will be fed - resizing here and
+        # again at predict time is what silently hurt accuracy before
+        gray = cv.cvtColor(frame, cv.COLOR_RGB2GRAY)
+        gray = cv.resize(gray, model.IMG_SIZE)
 
-        img = PIL.Image.open(file_path)
-        img.thumbnail((150, 150), PIL.Image.Resampling.LANCZOS)
-        img.save(file_path)
+        file_path = os.path.join(directory, f'frame{self.counters[class_num - 1]}.jpg')
+        cv.imwrite(file_path, gray)
 
         self.counters[class_num - 1] += 1
+        self.update_sample_count()
+
+    def update_sample_count(self):
+        # Show how many samples each class has, so the user knows when to train
+        one, two = self.counters[0] - 1, self.counters[1] - 1
+        self.btn_class_one.config(text=f"{self.classname_one}  ({one})")
+        self.btn_class_two.config(text=f"{self.classname_two}  ({two})")
 
     def train(self):
-        self.model.train_model(self.counters)
-        if self.model.is_trained:
-            messagebox.showinfo("Success", "Model trained successfully!")
+        success, message = self.model.train_model(self.counters)
+        if success:
+            messagebox.showinfo("Success", message)
+        else:
+            messagebox.showwarning("Cannot train", message)
 
     def reset(self):
-        for directory in ['1', '2']:
+        for class_num in (1, 2):
+            directory = model.class_dir(class_num)
             if os.path.exists(directory):
                 for file in os.listdir(directory):
                     file_path = os.path.join(directory, file)
@@ -140,15 +157,17 @@ class App:
         self.model = model.Model()
         self.auto_predict = False
         self.class_label.config(text='CLASS')
+        self.update_sample_count()
         messagebox.showinfo("Reset", "All data cleared successfully!")
 
     def update(self):
-        if self.auto_predict:
-            self.predict()
-
+        # One grab per cycle - the frame shown is the frame classified
         ret, frame = self.camera.get_frame()
 
         if ret and frame is not None:
+            if self.auto_predict:
+                self.predict(frame)
+
             self.photo = PIL.ImageTk.PhotoImage(
                 image=PIL.Image.fromarray(frame)
             )
@@ -156,10 +175,18 @@ class App:
 
         self.window.after(self.delay, self.update)
 
-    def predict(self):
-        ret, frame = self.camera.get_frame()
-        if not ret or frame is None:
-            return
+    def predict(self, frame=None):
+        manual = frame is None
+
+        if not self.model.is_trained:
+            if manual:
+                messagebox.showwarning("Warning", "Please train the model first!")
+            return None
+
+        if frame is None:
+            ret, frame = self.camera.get_frame()
+            if not ret or frame is None:
+                return None
 
         prediction = self.model.predict(frame)
 
@@ -169,3 +196,4 @@ class App:
         elif prediction == 2:
             self.class_label.config(text=self.classname_two)
             return self.classname_two
+        return None
